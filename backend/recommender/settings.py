@@ -86,7 +86,11 @@ REST_FRAMEWORK = {
     ],
 }
 
-ML_SERVICE_URL = os.environ.get("ML_SERVICE_URL", "http://localhost:8001")
+OLLAMA_BASE_URL = os.environ.get("OLLAMA_BASE_URL", "http://localhost:11434")
+OLLAMA_MODEL = os.environ.get("OLLAMA_MODEL", "qwen2.5:7b")
+EMBEDDING_MODEL = os.environ.get(
+    "EMBEDDING_MODEL", "sentence-transformers/paraphrase-multilingual-mpnet-base-v2"
+)
 
 SCORE_WEIGHTS = {
     "semantic": float(os.environ.get("SCORE_WEIGHT_SEMANTIC", "0.4")),

@@ -1,8 +1,8 @@
 import logging
 
-import httpx
 from django.conf import settings
 from django.core.management.base import BaseCommand
+from sentence_transformers import SentenceTransformer
 from tqdm import tqdm
 
 from movies.models import Movie
@@ -11,7 +11,7 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = "Generate embeddings for movies via the ML service and store in pgvector"
+    help = "Generate embeddings for movies using sentence-transformers and store in pgvector"
 
     def add_arguments(self, parser):
         parser.add_argument(
@@ -20,16 +20,9 @@ class Command(BaseCommand):
             default=64,
             help="Number of descriptions to embed per batch (default: 64)",
         )
-        parser.add_argument(
-            "--ml-url",
-            type=str,
-            default=None,
-            help="ML service URL (default: from settings.ML_SERVICE_URL)",
-        )
 
     def handle(self, *args, **options):
         batch_size = options["batch_size"]
-        ml_url = options["ml_url"] or settings.ML_SERVICE_URL
 
         movies = list(
             Movie.objects.filter(embedding__isnull=True)
@@ -40,8 +33,9 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS("All movies already have embeddings"))
             return
 
+        self.stdout.write(f"Loading embedding model: {settings.EMBEDDING_MODEL}...")
+        model = SentenceTransformer(settings.EMBEDDING_MODEL)
         self.stdout.write(f"Generating embeddings for {len(movies)} movies...")
-        self.stdout.write(f"ML service: {ml_url}")
 
         updated_ids = []
         updated_vectors = []
@@ -56,24 +50,11 @@ class Command(BaseCommand):
                     desc_truncated = (description or "")[:500]
                     texts.append(f"{name}. {genre_str}. {desc_truncated}")
 
-                try:
-                    response = httpx.post(
-                        f"{ml_url}/embed",
-                        json={"texts": texts},
-                        timeout=120.0,
-                    )
-                    response.raise_for_status()
-                    embeddings = response.json()["embeddings"]
-                except (httpx.HTTPError, KeyError) as e:
-                    self.stderr.write(
-                        self.style.ERROR(f"ML service error at batch {i}: {e}")
-                    )
-                    self.stderr.write("Is the ML service running? Try: docker compose up ml")
-                    return
+                embeddings = model.encode(texts, convert_to_numpy=True)
 
                 for (movie_id, _, _, _), embedding in zip(batch, embeddings):
                     updated_ids.append(movie_id)
-                    updated_vectors.append(embedding)
+                    updated_vectors.append(embedding.tolist())
 
                 pbar.update(len(batch))
 

@@ -15,17 +15,12 @@ services:
       timeout: 5s
       retries: 5
 
-  ml:
-    build: ./ml
-    environment:
-      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
-      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
-      DEVICE: ${DEVICE:-cpu}
+  ollama:
+    image: ollama/ollama:latest
     volumes:
       - ollama_data:/root/.ollama
-      - model_cache:/root/.cache
     ports:
-      - "8001:8000"
+      - "11434:11434"
     deploy:
       resources:
         reservations:
@@ -34,17 +29,19 @@ services:
               count: all
               capabilities: [gpu]
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-f", "http://localhost:11434/"]
       interval: 10s
-      timeout: 30s
+      timeout: 10s
       retries: 10
-      start_period: 180s
+      start_period: 30s
 
   backend:
     build: ./backend
     environment:
       DATABASE_URL: postgres://recommender:${DB_PASSWORD:-changeme}@db:5432/recommender
-      ML_SERVICE_URL: http://ml:8000
+      OLLAMA_BASE_URL: http://ollama:11434
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
+      EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
       DJANGO_SETTINGS_MODULE: recommender.settings
       SECRET_KEY: ${SECRET_KEY:-change-in-production}
       DEBUG: ${DEBUG:-0}
@@ -53,10 +50,13 @@ services:
       SCORE_WEIGHT_SESSION: ${SCORE_WEIGHT_SESSION:-0.3}
     volumes:
       - ./catalog_okko.parquet:/app/catalog_okko.parquet:ro
+      - model_cache:/root/.cache
     ports:
       - "8000:8000"
     depends_on:
       db:
+        condition: service_healthy
+      ollama:
         condition: service_healthy
     command: >
       sh -c "
