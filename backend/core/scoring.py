@@ -1,17 +1,23 @@
-"""Multi-signal hybrid scoring for movie recommendations.
+"""Multi-signal hybrid scoring with MMR diversification.
 
-Combines three signals into a weighted total score:
+Scoring pipeline:
+  candidates ──> hybrid_score() per movie ──> mmr_diversify() ──> top-N
+
+Three scoring signals, weighted sum:
   - semantic (0.4): cosine similarity between query and movie embeddings
-  - metadata (0.3): genre overlap, mood match, negation filtering
+  - metadata (0.3): genre overlap between LLM-extracted intent and movie genres
   - session  (0.3): cosine similarity between session preference vector and movie
 
-Cosine similarity is mapped from [-1, 1] to [0, 1] for consistent scoring.
+Cosine similarity is mapped from [-1, 1] to [0, 1] via (sim + 1) / 2.
 Weights are configurable via SCORE_WEIGHT_* environment variables.
+
+MMR (Maximal Marginal Relevance, Carbonell & Goldstein 1998) ensures the
+top-N results are diverse: each subsequent pick maximizes
+  lambda * score - (1 - lambda) * max_similarity_to_selected
 """
 
 from django.conf import settings
 
-from core.config import MOOD_GENRE_MAP
 from core.embedding_service import cosine_similarity
 
 
@@ -42,6 +48,57 @@ def hybrid_score(
     }
 
 
+def mmr_diversify(
+    scored_candidates: list[dict],
+    top_n: int = 5,
+    lambda_param: float = 0.7,
+) -> list[dict]:
+    """Select top-N diverse results via Maximal Marginal Relevance.
+
+    Each candidate dict must have 'total' (relevance score) and
+    'embedding' (for pairwise similarity computation).
+    """
+    if len(scored_candidates) <= top_n:
+        return scored_candidates
+
+    candidates = list(scored_candidates)
+    selected = []
+
+    best = max(candidates, key=lambda c: c["total"])
+    selected.append(best)
+    candidates.remove(best)
+
+    while len(selected) < top_n and candidates:
+        best_mmr_score = -float("inf")
+        best_candidate = None
+
+        for candidate in candidates:
+            relevance = candidate["total"]
+
+            max_sim = 0.0
+            cand_emb = candidate.get("embedding")
+            if cand_emb:
+                for sel in selected:
+                    sel_emb = sel.get("embedding")
+                    if sel_emb:
+                        sim = cosine_similarity(cand_emb, sel_emb)
+                        max_sim = max(max_sim, sim)
+
+            mmr = lambda_param * relevance - (1 - lambda_param) * max_sim
+
+            if mmr > best_mmr_score:
+                best_mmr_score = mmr
+                best_candidate = candidate
+
+        if best_candidate:
+            selected.append(best_candidate)
+            candidates.remove(best_candidate)
+        else:
+            break
+
+    return selected
+
+
 def _semantic_score(movie: dict, query_embedding: list[float]) -> float:
     movie_embedding = movie.get("embedding")
     if not movie_embedding:
@@ -51,28 +108,15 @@ def _semantic_score(movie: dict, query_embedding: list[float]) -> float:
 
 
 def _metadata_score(movie: dict, intent: dict) -> float:
-    scores = []
-
+    """Genre overlap between LLM-extracted intent genres and movie genres."""
     intent_genres = set(intent.get("genres", []))
     movie_genres = set(movie.get("genres", []))
-    if intent_genres:
-        overlap = len(intent_genres & movie_genres)
-        scores.append(overlap / len(intent_genres))
 
-    mood = intent.get("mood", "")
-    if mood and mood in MOOD_GENRE_MAP:
-        mood_genres = set(MOOD_GENRE_MAP[mood])
-        overlap = len(mood_genres & movie_genres)
-        scores.append(overlap / len(mood_genres) if mood_genres else 0.0)
-
-    negations = set(intent.get("negations", []))
-    if negations and negations & movie_genres:
-        return 0.0
-
-    if not scores:
+    if not intent_genres:
         return 0.5
 
-    return sum(scores) / len(scores)
+    overlap = len(intent_genres & movie_genres)
+    return overlap / len(intent_genres)
 
 
 def _session_score(movie: dict, session_vector: list[float]) -> float:
