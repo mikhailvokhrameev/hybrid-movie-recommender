@@ -144,39 +144,17 @@ def is_available() -> bool:
         return False
 
 
-def _fallback_intent(query: str) -> dict:
-    query_lower = query.lower()
-    genres = []
-    mood = ""
-    negations = []
+def _fallback_intent(_query: str) -> dict:
+    """Return empty intent when Ollama is unavailable.
 
-    genre_keywords = {
-        "комеди": "Комедии", "смешн": "Комедии", "весел": "Комедии",
-        "драм": "Драмы", "серьёзн": "Драмы",
-        "ужас": "Ужасы", "страшн": "Ужасы", "хоррор": "Ужасы",
-        "боевик": "Боевики", "экшн": "Боевики", "экшен": "Боевики",
-        "фантастик": "Фантастика", "космос": "Фантастика",
-        "мелодрам": "Мелодрамы", "романтик": "Мелодрамы", "любов": "Мелодрамы",
-        "триллер": "Триллеры", "напряжённ": "Триллеры",
-        "детектив": "Детективы", "расследован": "Детективы",
-        "мультфильм": "Мультфильмы", "мультик": "Мультфильмы",
-        "документальн": "Документальное",
-        "аниме": "Аниме",
-    }
-
-    for keyword, genre in genre_keywords.items():
-        if keyword in query_lower:
-            genres.append(genre)
-
-    if "не хочу" in query_lower or "без " in query_lower or "кроме " in query_lower:
-        for keyword, genre in genre_keywords.items():
-            if keyword in query_lower:
-                negations.append(genre)
-
+    Semantic search via embeddings still works without parsed intent --
+    it just loses metadata filtering. This is preferable to broken
+    keyword parsing that silently produces wrong results.
+    """
     return {
-        "genres": genres,
-        "mood": mood,
+        "genres": [],
+        "mood": "",
         "themes": [],
-        "negations": negations,
+        "negations": [],
         "reference_films": [],
     }
