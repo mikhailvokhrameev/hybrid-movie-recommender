@@ -62,7 +62,7 @@ def generate_candidates(
             "release_date": str(movie.release_date) if movie.release_date else None,
             "description": movie.description,
             "url": movie.url,
-            "embedding": list(movie.embedding) if movie.embedding else None,
+            "embedding": list(movie.embedding) if movie.embedding is not None else None,
             "distance": float(movie.distance),
         }
         for movie in candidates
