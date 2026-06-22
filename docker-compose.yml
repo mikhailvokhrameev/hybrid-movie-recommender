@@ -16,7 +16,9 @@ services:
       retries: 5
 
   ollama:
-    image: ollama/ollama:latest
+    build: ./ollama
+    environment:
+      OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
     volumes:
       - ollama_data:/root/.ollama
     ports:
