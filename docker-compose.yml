@@ -54,6 +54,7 @@ services:
       GENRE_MATCH_THRESHOLD: ${GENRE_MATCH_THRESHOLD:-0.5}
     volumes:
       - ./catalog_okko.parquet:/app/catalog_okko.parquet:ro
+      - ./data:/app/data:ro
       - model_cache:/root/.cache
     ports:
       - "8000:8000"
