@@ -99,12 +99,17 @@ def mmr_diversify(
     return selected
 
 
-def _semantic_score(movie: dict, query_embedding: list[float]) -> float:
+def _embedding_similarity(vec: list[float], movie: dict) -> float:
+    """Cosine similarity between a vector and the movie's embedding, mapped to [0, 1]."""
     movie_embedding = movie.get("embedding")
     if movie_embedding is None:
         return 0.0
-    sim = cosine_similarity(query_embedding, movie_embedding)
+    sim = cosine_similarity(vec, movie_embedding)
     return max(0.0, (sim + 1.0) / 2.0)
+
+
+def _semantic_score(movie: dict, query_embedding: list[float]) -> float:
+    return _embedding_similarity(query_embedding, movie)
 
 
 def _metadata_score(movie: dict, intent: dict) -> float:
@@ -120,8 +125,4 @@ def _metadata_score(movie: dict, intent: dict) -> float:
 
 
 def _session_score(movie: dict, session_vector: list[float]) -> float:
-    movie_embedding = movie.get("embedding")
-    if movie_embedding is None:
-        return 0.0
-    sim = cosine_similarity(session_vector, movie_embedding)
-    return max(0.0, (sim + 1.0) / 2.0)
+    return _embedding_similarity(session_vector, movie)

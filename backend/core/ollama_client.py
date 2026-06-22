@@ -70,7 +70,7 @@ Write a brief, natural response in Russian recommending these movies with person
 
 def _build_movies_context(movies: list[dict]) -> str:
     return "\n".join(
-        f"- {m['title']} ({', '.join(m.get('genres', []))}): {m.get('description', '')[:200]}"
+        f"- {m.get('serial_name', m.get('title', ''))} ({', '.join(m.get('genres', []))}): {m.get('description', '')[:200]}"
         for m in movies
     )
 
@@ -113,20 +113,39 @@ def _explanation_payload(query: str, movies: list[dict], stream: bool = False) -
     }
 
 
+# --- Low-level Ollama call (shared by ollama_client and evaluation) ---
+
+
+def _chat_sync(messages: list[dict], json_mode: bool = False, timeout: float = 60.0) -> str:
+    """Send a chat request to Ollama and return the response content string."""
+    payload = {
+        "model": settings.OLLAMA_MODEL,
+        "messages": messages,
+        "stream": False,
+    }
+    if json_mode:
+        payload["format"] = "json"
+    response = httpx.post(
+        f"{settings.OLLAMA_BASE_URL}/api/chat",
+        json=payload,
+        timeout=timeout,
+    )
+    response.raise_for_status()
+    return response.json()["message"]["content"]
+
+
 # --- Sync API (for management commands) ---
 
 
 def parse_intent(query: str) -> dict:
     """Extract structured intent from a natural language movie query via Ollama JSON mode."""
     try:
-        response = httpx.post(
-            f"{settings.OLLAMA_BASE_URL}/api/chat",
-            json=_intent_payload(query),
+        content = _chat_sync(
+            _intent_payload(query)["messages"],
+            json_mode=True,
             timeout=60.0,
         )
-        response.raise_for_status()
-        parsed = json.loads(response.json()["message"]["content"])
-        return _extract_intent(parsed)
+        return _extract_intent(json.loads(content))
     except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
         logger.warning(f"Intent parsing failed, using fallback: {e}")
         return _fallback_intent(query)
@@ -135,13 +154,10 @@ def parse_intent(query: str) -> dict:
 def generate_explanation(query: str, movies: list[dict]) -> str:
     """Generate a Russian-language explanation of why each movie matches the query (RAG)."""
     try:
-        response = httpx.post(
-            f"{settings.OLLAMA_BASE_URL}/api/chat",
-            json=_explanation_payload(query, movies),
+        return _chat_sync(
+            _explanation_payload(query, movies)["messages"],
             timeout=120.0,
         )
-        response.raise_for_status()
-        return response.json()["message"]["content"]
     except (httpx.HTTPError, KeyError) as e:
         logger.warning(f"Explanation generation failed: {e}")
         return ""

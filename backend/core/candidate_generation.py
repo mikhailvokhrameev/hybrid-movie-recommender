@@ -10,7 +10,6 @@ Pipeline position:
 
 import logging
 
-from django.db.models import Q
 from pgvector.django import CosineDistance
 
 from movies.models import Movie
