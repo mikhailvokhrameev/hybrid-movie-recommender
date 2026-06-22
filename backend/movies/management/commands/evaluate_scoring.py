@@ -67,6 +67,44 @@ class Command(BaseCommand):
             return {"semantic": parts[0], "metadata": parts[1], "session": parts[2]}
         return settings.SCORE_WEIGHTS
 
+    def _build_intent(self, test_case):
+        """Build intent dict from test case, including content_type filter."""
+        intent = {"genres": list(test_case.get("relevant_genres", []))}
+        if "negated_genres" in test_case:
+            intent["negations"] = test_case["negated_genres"]
+        if "relevant_content_type" in test_case:
+            intent["content_type"] = test_case["relevant_content_type"]
+        return intent
+
+    def _score_query(self, test_case, k, weights):
+        """Run the full pipeline for one query and return metrics."""
+        query = test_case["query"]
+        relevant_titles = test_case.get("relevant_titles", [])
+
+        query_embedding = encode_query(query)
+        intent = self._build_intent(test_case)
+        candidates = generate_candidates(query_embedding, intent)
+
+        scored = []
+        for movie in candidates:
+            scores = hybrid_score(movie, query_embedding, intent, weights=weights)
+            scored.append({**movie, **scores})
+
+        scored.sort(key=lambda x: x["total"], reverse=True)
+        diversified = mmr_diversify(scored, top_n=k)
+
+        recommended_titles = [m["serial_name"] for m in diversified]
+        recommended_embeddings = [
+            m["embedding"] for m in diversified if m.get("embedding") is not None
+        ]
+
+        return evaluate_query(
+            recommended_titles,
+            relevant_titles,
+            recommended_embeddings,
+            k=k,
+        )
+
     def _run_eval(self, test_set, k, weights):
         self.stdout.write(
             f"Weights: semantic={weights['semantic']}, "
@@ -75,41 +113,11 @@ class Command(BaseCommand):
 
         per_query = []
         for test_case in test_set:
-            query = test_case["query"]
-            relevant_genres = set(test_case.get("relevant_genres", []))
-
-            query_embedding = encode_query(query)
-            intent = {"genres": list(relevant_genres)}
-            candidates = generate_candidates(query_embedding, intent)
-
-            scored = []
-            for movie in candidates:
-                scores = hybrid_score(movie, query_embedding, intent, weights=weights)
-                scored.append({**movie, **scores})
-
-            scored.sort(key=lambda x: x["total"], reverse=True)
-            diversified = mmr_diversify(scored, top_n=k)
-
-            recommended_titles = [m["serial_name"] for m in diversified]
-            recommended_embeddings = [
-                m["embedding"] for m in diversified if m.get("embedding")
-            ]
-
-            genre_hits = []
-            for m in diversified:
-                if relevant_genres & set(m.get("genres", [])):
-                    genre_hits.append(m["serial_name"])
-
-            metrics = evaluate_query(
-                recommended_titles,
-                genre_hits,
-                recommended_embeddings,
-                k=k,
-            )
+            metrics = self._score_query(test_case, k, weights)
             per_query.append(metrics)
 
             self.stdout.write(
-                f"  {query[:50]:50s} P@{k}={metrics['precision_at_k']:.2f} "
+                f"  {test_case['query'][:50]:50s} P@{k}={metrics['precision_at_k']:.2f} "
                 f"NDCG={metrics['ndcg_at_k']:.2f} "
                 f"Div={metrics.get('diversity', 0):.2f}"
             )
@@ -133,30 +141,7 @@ class Command(BaseCommand):
 
                 per_query = []
                 for test_case in test_set:
-                    query = test_case["query"]
-                    relevant_genres = set(test_case.get("relevant_genres", []))
-
-                    query_embedding = encode_query(query)
-                    intent = {"genres": list(relevant_genres)}
-                    candidates = generate_candidates(query_embedding, intent)
-
-                    scored = []
-                    for movie in candidates:
-                        scores = hybrid_score(
-                            movie, query_embedding, intent, weights=weights
-                        )
-                        scored.append({**movie, **scores})
-
-                    scored.sort(key=lambda x: x["total"], reverse=True)
-                    diversified = mmr_diversify(scored, top_n=k)
-
-                    recommended_titles = [m["serial_name"] for m in diversified]
-                    genre_hits = []
-                    for m in diversified:
-                        if relevant_genres & set(m.get("genres", [])):
-                            genre_hits.append(m["serial_name"])
-
-                    metrics = evaluate_query(recommended_titles, genre_hits, k=k)
+                    metrics = self._score_query(test_case, k, weights)
                     per_query.append(metrics)
 
                 aggregated = aggregate_metrics(per_query)
