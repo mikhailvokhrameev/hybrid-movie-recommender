@@ -1,21 +1,26 @@
 """Session-based preference learning via exponential moving average (EMA).
 
 Maintains a 768-dim preference vector per conversation session.
-Each query embedding is blended into the running vector with alpha=0.7
-(recent queries dominate). The vector is L2-normalized after each update
-to keep cosine similarity scores consistent regardless of turn count.
+Each query embedding is blended into the running vector with a configurable
+alpha (default 0.7). The vector is L2-normalized after each update to keep
+cosine similarity scores consistent regardless of turn count.
+
+Alpha is configurable via SESSION_ALPHA env var. Tune it with:
+  manage.py evaluate_scoring --sweep
 """
+
+import os
 
 import numpy as np
 
 
-ALPHA = 0.7
+DEFAULT_ALPHA = float(os.environ.get("SESSION_ALPHA", "0.7"))
 
 
 def update_preference_vector(
     current_vector: list[float] | None,
     query_embedding: list[float],
-    alpha: float = ALPHA,
+    alpha: float = DEFAULT_ALPHA,
 ) -> list[float]:
     query_vec = np.array(query_embedding)
 

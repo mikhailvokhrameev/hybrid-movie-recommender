@@ -8,7 +8,7 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
-      - "5432:5432"
+      - "5433:5432"
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U recommender"]
       interval: 5s
@@ -48,6 +48,7 @@ services:
       SCORE_WEIGHT_SEMANTIC: ${SCORE_WEIGHT_SEMANTIC:-0.4}
       SCORE_WEIGHT_METADATA: ${SCORE_WEIGHT_METADATA:-0.3}
       SCORE_WEIGHT_SESSION: ${SCORE_WEIGHT_SESSION:-0.3}
+      SESSION_ALPHA: ${SESSION_ALPHA:-0.7}
     volumes:
       - ./catalog_okko.parquet:/app/catalog_okko.parquet:ro
       - model_cache:/root/.cache
