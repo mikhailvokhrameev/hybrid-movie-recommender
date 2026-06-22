@@ -24,20 +24,29 @@ CATALOG_GENRES = [
     "Триллеры", "Ужасы", "Фантастика", "Фильмы для детей", "Фитнес", "Фэнтези",
 ]
 
-INTENT_PROMPT = """You are a movie intent parser. Extract structured information from the user's query about what kind of movie they want to watch.
+INTENT_PROMPT = """You are a movie intent parser. Given a user query, return a JSON object.
 
-Return a JSON object with these fields:
-- genres: list of genres from the ALLOWED LIST ONLY: {genres}
-- mood: detected mood (happy, sad, excited, relaxed, romantic, thoughtful, scared, energetic, or empty string)
-- themes: list of themes or topics mentioned
-- negations: list of genres the user does NOT want (use exact names from the allowed list)
-- reference_films: list of film titles mentioned as reference
+ALLOWED GENRES (use ONLY these exact strings, copy-paste):
+{genres}
 
-IMPORTANT: Use genre names EXACTLY as listed above. Do not invent new genre names or change capitalization.
+JSON fields:
+- "genres": list of matching genres from the ALLOWED list above
+- "mood": one of: happy, sad, excited, relaxed, romantic, thoughtful, scared, energetic, or ""
+- "themes": list of themes mentioned
+- "negations": list of genres the user does NOT want (from ALLOWED list)
+- "reference_films": list of film titles mentioned
 
-User query: {query}
+Example:
+User: "хочу что-то смешное, но не ужасы"
+{{"genres": ["Комедии"], "mood": "happy", "themes": [], "negations": ["Ужасы"], "reference_films": []}}
 
-Respond ONLY with valid JSON, no other text."""
+Example:
+User: "триллер как Молчание ягнят"
+{{"genres": ["Триллеры"], "mood": "excited", "themes": [], "negations": [], "reference_films": ["Молчание ягнят"]}}
+
+Now parse this query:
+User: "{query}"
+"""
 
 EXPLANATION_PROMPT = """You are a movie recommendation assistant speaking Russian. The user asked: "{query}"
 
