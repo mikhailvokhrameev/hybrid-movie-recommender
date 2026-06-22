@@ -77,6 +77,8 @@ class Command(BaseCommand):
         self.genre_freq = compute_genre_frequency(catalog_genres)
         self.catalog_size = Movie.objects.count()
 
+        self._use_llm = use_llm
+
         if options["sweep"]:
             self._run_sweep(test_set, k)
         else:
@@ -197,34 +199,60 @@ class Command(BaseCommand):
             self.stdout.write(f"  {key}: {value:.4f}")
 
     def _run_sweep(self, test_set, k):
-        self.stdout.write("Running weight grid search (without LLM judge for speed)...")
+        use_llm = self._use_llm
+
+        if use_llm:
+            grid = [
+                (0.7, 0.2, 0.1),
+                (0.6, 0.2, 0.2),
+                (0.5, 0.3, 0.2),
+                (0.4, 0.3, 0.3),
+                (0.3, 0.4, 0.3),
+                (0.5, 0.2, 0.3),
+            ]
+            self.stdout.write(
+                f"Running weight grid search with LLM judge ({len(grid)} configs, "
+                f"~{len(grid) * len(test_set) * k * 2}s estimated)..."
+            )
+        else:
+            grid = [
+                (sem, met, round(1.0 - sem - met, 2))
+                for sem in [0.2, 0.3, 0.4, 0.5, 0.6, 0.7]
+                for met in [0.1, 0.2, 0.3, 0.4]
+                if round(1.0 - sem - met, 2) >= 0
+            ]
+            self.stdout.write(f"Running weight grid search ({len(grid)} configs)...")
+
         results = []
+        for i, (sem, met, ses) in enumerate(grid):
+            weights = {"semantic": sem, "metadata": met, "session": ses}
+            if use_llm:
+                self.stdout.write(
+                    f"  Config {i+1}/{len(grid)}: sem={sem} met={met} ses={ses}..."
+                )
 
-        for sem in [0.2, 0.3, 0.4, 0.5, 0.6, 0.7]:
-            for met in [0.1, 0.2, 0.3, 0.4]:
-                ses = round(1.0 - sem - met, 2)
-                if ses < 0:
-                    continue
-                weights = {"semantic": sem, "metadata": met, "session": ses}
+            per_query = []
+            for test_case in test_set:
+                metrics = self._score_query(test_case, k, weights, use_llm)
+                metrics.pop("_recommended_titles", None)
+                per_query.append(metrics)
 
-                per_query = []
-                for test_case in test_set:
-                    metrics = self._score_query(test_case, k, weights)
-                    per_query.append(metrics)
+            aggregated = aggregate_metrics(per_query)
+            results.append((weights, aggregated))
 
-                aggregated = aggregate_metrics(per_query)
-                results.append((weights, aggregated))
+        sort_key = "llm_relevance" if use_llm else "ndcg_at_k"
+        results.sort(key=lambda x: x[1].get(sort_key, 0), reverse=True)
 
-        results.sort(key=lambda x: x[1].get("ndcg_at_k", 0), reverse=True)
-
-        self.stdout.write("\nTop 5 weight configurations by NDCG@k:")
-        self.stdout.write(f"{'Semantic':>8} {'Meta':>6} {'Session':>8} {'P@k':>6} {'NDCG':>6} {'Nov':>6}")
-        self.stdout.write("-" * 48)
-        for weights, metrics in results[:5]:
+        header_llm = f" {'LLM':>6}" if use_llm else ""
+        self.stdout.write(f"\nTop weight configurations by {sort_key}:")
+        self.stdout.write(f"{'Semantic':>8} {'Meta':>6} {'Session':>8} {'P@k':>6} {'NDCG':>6} {'Nov':>6}{header_llm}")
+        self.stdout.write("-" * (48 + (7 if use_llm else 0)))
+        for weights, metrics in results[:len(grid)]:
+            llm_col = f" {metrics.get('llm_relevance', 0):>6.2f}" if use_llm else ""
             self.stdout.write(
                 f"{weights['semantic']:>8.2f} {weights['metadata']:>6.2f} "
                 f"{weights['session']:>8.2f} "
                 f"{metrics.get('precision_at_k', 0):>6.3f} "
                 f"{metrics.get('ndcg_at_k', 0):>6.3f} "
-                f"{metrics.get('novelty', 0):>6.3f}"
+                f"{metrics.get('novelty', 0):>6.3f}{llm_col}"
             )
