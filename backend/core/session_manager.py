@@ -42,27 +42,18 @@ def track_explicit_preferences(
     current_preferences: dict,
     intent: dict,
 ) -> dict:
-    prefs = {
-        "liked_genres": list(current_preferences.get("liked_genres", [])),
-        "disliked_genres": list(current_preferences.get("disliked_genres", [])),
-        "themes": list(current_preferences.get("themes", [])),
-        "reference_films": list(current_preferences.get("reference_films", [])),
-    }
+    INTENT_TO_PREF = [
+        ("genres", "liked_genres"),
+        ("negations", "disliked_genres"),
+        ("themes", "themes"),
+        ("reference_films", "reference_films"),
+    ]
 
-    for genre in intent.get("genres", []):
-        if genre not in prefs["liked_genres"]:
-            prefs["liked_genres"].append(genre)
+    prefs = {pref_key: list(current_preferences.get(pref_key, [])) for _, pref_key in INTENT_TO_PREF}
 
-    for genre in intent.get("negations", []):
-        if genre not in prefs["disliked_genres"]:
-            prefs["disliked_genres"].append(genre)
-
-    for theme in intent.get("themes", []):
-        if theme not in prefs["themes"]:
-            prefs["themes"].append(theme)
-
-    for film in intent.get("reference_films", []):
-        if film not in prefs["reference_films"]:
-            prefs["reference_films"].append(film)
+    for intent_key, pref_key in INTENT_TO_PREF:
+        for item in intent.get(intent_key, []):
+            if item not in prefs[pref_key]:
+                prefs[pref_key].append(item)
 
     return prefs

@@ -17,9 +17,9 @@ from collections import Counter
 
 import httpx
 import numpy as np
-from django.conf import settings
 
 from core.embedding_service import cosine_similarity
+from core.ollama_client import _chat_sync
 
 logger = logging.getLogger(__name__)
 
@@ -135,20 +135,12 @@ def llm_relevance_score(query: str, movie: dict) -> int:
         description=(movie.get("description", "") or "")[:300],
     )
     try:
-        response = httpx.post(
-            f"{settings.OLLAMA_BASE_URL}/api/chat",
-            json={
-                "model": settings.OLLAMA_MODEL,
-                "messages": [{"role": "user", "content": prompt}],
-                "format": "json",
-                "stream": False,
-            },
+        content = _chat_sync(
+            [{"role": "user", "content": prompt}],
+            json_mode=True,
             timeout=30.0,
         )
-        response.raise_for_status()
-        content = response.json()["message"]["content"]
-        parsed = json.loads(content)
-        score = int(parsed.get("score", 3))
+        score = int(json.loads(content).get("score", 3))
         return max(1, min(5, score))
     except (httpx.HTTPError, json.JSONDecodeError, KeyError, ValueError) as e:
         logger.warning(f"LLM judge failed for '{movie.get('serial_name', '')}': {e}")
