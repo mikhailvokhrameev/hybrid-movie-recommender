@@ -12,7 +12,7 @@ User query (Russian natural language)
   |
   ├──[PARALLEL]──> ollama_client.parse_intent()     ──> structured intent (JSON)
   │                  (includes mood detection)
-  │                  fallback: keyword extraction
+  │                  fallback: empty intent (semantic search still works)
   │
   └──[PARALLEL]──> embedding_service.encode_query()  ──> 768-dim query vector
   |
@@ -62,7 +62,8 @@ Calls the Ollama container's HTTP API (`/api/chat`) for three tasks:
 requesting JSON output. Ollama's `format: "json"` mode forces valid JSON.
 Extracts genres, mood, themes, negations, and reference films.
 On failure (timeout, malformed JSON, Ollama down), falls back to `_fallback_intent()`
-which uses Russian keyword matching.
+which returns an empty intent. Semantic search via embeddings still works without
+parsed intent -- it just loses metadata filtering.
 
 **Explanation generation** (`generate_explanation`, `stream_explanation`): RAG pattern.
 Movie metadata and descriptions are injected as context, and the LLM writes 1-2
@@ -135,12 +136,6 @@ Reusable evaluation framework for measuring recommendation quality:
 Used by `manage.py evaluate_scoring` and the ablation notebook.
 Test set: `data/test_queries.json` (20 hand-curated Russian queries with relevance judgments).
 
-### `config.py` -- Static Mappings (fallback only)
-
-Two dictionaries mapping Russian genre names. Used ONLY in the keyword fallback path
-(`ollama_client._fallback_intent()`) when Ollama is unavailable. The primary scoring
-path uses LLM-extracted genres directly.
-
 ## Design Decisions
 
 **Why negation is a hard filter, not a scoring signal**: A user saying "not horror"
@@ -161,11 +156,14 @@ weight. The mapping `(sim + 1) / 2` gives: -1 to 0, 0 to 0.5, 1 to 1.0.
 An early exploratory query permanently dilutes the signal from a later specific
 query. EMA with alpha=0.7 makes recent queries dominate.
 
-**Why keyword fallback exists**: Ollama can be slow on CPU (10-30s) or unavailable
-during startup. The keyword fallback provides instant, deterministic intent parsing
-for common genre requests, keeping the system usable without LLM inference.
+**Why the fallback returns empty intent instead of keyword parsing**: An earlier
+version used Russian keyword stem matching as a fallback. It had two bugs:
+(1) no negation scoping -- "хочу триллер, без ужасов" put both genres in the
+negation list; (2) substring matching missed context ("не веселое" detected as
+happy). Empty intent is safer: semantic search via embeddings still produces
+relevant results, the user just loses genre filtering temporarily.
 
-**Why mood detection is unified into Ollama**: The previous substring-matching
-approach missed context ("не веселое" detected as happy), synonyms, and implicit
-mood. Ollama already parses the full query and returns a mood field with contextual
-understanding. The separate module was doing the same job worse.
+**Why mood detection is unified into Ollama**: The previous standalone
+`mood_detector.py` used substring matching on Russian word stems. It missed
+context, negation, and implicit mood. Ollama already parses the full query
+and returns a mood field -- the separate module was doing the same job worse.
