@@ -15,14 +15,25 @@ from django.conf import settings
 
 logger = logging.getLogger(__name__)
 
+CATALOG_GENRES = [
+    "Аниме", "Артхаус", "Биографии", "Блоги", "Боевики", "Вестерны",
+    "Военное", "Детективы", "Документальное", "Драмы", "Интервью",
+    "Историческое", "Комедии", "Концерты", "Короткий метр", "Криминальное",
+    "Курсы", "Мелодрамы", "Музыкальное", "Мультфильмы", "Презентации",
+    "Приключения", "Природа", "Путешествия", "Семейное", "Советское",
+    "Триллеры", "Ужасы", "Фантастика", "Фильмы для детей", "Фитнес", "Фэнтези",
+]
+
 INTENT_PROMPT = """You are a movie intent parser. Extract structured information from the user's query about what kind of movie they want to watch.
 
 Return a JSON object with these fields:
-- genres: list of genre keywords (in Russian)
+- genres: list of genres from the ALLOWED LIST ONLY: {genres}
 - mood: detected mood (happy, sad, excited, relaxed, romantic, thoughtful, scared, energetic, or empty string)
 - themes: list of themes or topics mentioned
-- negations: list of things the user does NOT want
+- negations: list of genres the user does NOT want (use exact names from the allowed list)
 - reference_films: list of film titles mentioned as reference
+
+IMPORTANT: Use genre names EXACTLY as listed above. Do not invent new genre names or change capitalization.
 
 User query: {query}
 
@@ -50,7 +61,9 @@ def parse_intent(query: str, history: list[dict] | None = None) -> dict:
             json={
                 "model": settings.OLLAMA_MODEL,
                 "messages": [
-                    {"role": "user", "content": INTENT_PROMPT.format(query=query)},
+                    {"role": "user", "content": INTENT_PROMPT.format(
+                        query=query, genres=", ".join(CATALOG_GENRES)
+                    )},
                 ],
                 "format": "json",
                 "stream": False,
