@@ -51,6 +51,7 @@ services:
       SCORE_WEIGHT_METADATA: ${SCORE_WEIGHT_METADATA:-0.3}
       SCORE_WEIGHT_SESSION: ${SCORE_WEIGHT_SESSION:-0.3}
       SESSION_ALPHA: ${SESSION_ALPHA:-0.7}
+      GENRE_MATCH_THRESHOLD: ${GENRE_MATCH_THRESHOLD:-0.5}
     volumes:
       - ./catalog_okko.parquet:/app/catalog_okko.parquet:ro
       - model_cache:/root/.cache
