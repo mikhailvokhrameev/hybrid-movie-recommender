@@ -160,6 +160,7 @@ class Command(BaseCommand):
         )
         metrics["negation_violations"] = negation_violations
         metrics["content_type_violations"] = content_type_violations
+        metrics["_recommended_titles"] = recommended_titles
         return metrics
 
     def _run_eval(self, test_set, k, weights, use_llm):
@@ -172,6 +173,7 @@ class Command(BaseCommand):
         all_recommendations = []
         for test_case in test_set:
             metrics = self._score_query(test_case, k, weights, use_llm)
+            all_recommendations.append(metrics.pop("_recommended_titles", []))
             per_query.append(metrics)
 
             neg = metrics.get("negation_violations", 0)
