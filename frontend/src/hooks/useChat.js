@@ -1,6 +1,7 @@
 import { useState, useCallback, useRef } from 'react'
 
 const API_URL = '/api/chat/'
+let nextId = 0
 
 export function useChat() {
   const [messages, setMessages] = useState([])
@@ -11,11 +12,12 @@ export function useChat() {
   const sendMessage = useCallback(async (text) => {
     if (!text.trim() || isStreaming) return
 
-    const userMessage = { role: 'user', content: text }
+    const userMessage = { id: nextId++, role: 'user', content: text }
     setMessages(prev => [...prev, userMessage])
     setIsStreaming(true)
 
     const assistantMessage = {
+      id: nextId++,
       role: 'assistant',
       movies: [],
       explanation: '',

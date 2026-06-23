@@ -24,6 +24,7 @@ export default function WelcomeScreen({ onSuggestionClick }) {
             onClick={() => onSuggestionClick(text)}
             className="px-4 py-2 text-sm text-muted bg-surface rounded-lg
                        hover:text-ink hover:bg-elevated
+                       focus-visible:outline-2 focus-visible:outline-amber focus-visible:outline-offset-2
                        transition-colors duration-150"
           >
             {text}

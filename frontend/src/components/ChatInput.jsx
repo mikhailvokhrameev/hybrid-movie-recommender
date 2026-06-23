@@ -20,7 +20,9 @@ export default function ChatInput({ onSend, disabled }) {
 
   return (
     <form onSubmit={handleSubmit} className="flex gap-3 items-end">
+      <label htmlFor="chat-input" className="sr-only">Поиск фильмов</label>
       <textarea
+        id="chat-input"
         ref={inputRef}
         value={text}
         onChange={e => setText(e.target.value)}
@@ -32,13 +34,14 @@ export default function ChatInput({ onSend, disabled }) {
                    px-4 py-3 placeholder:text-muted
                    border border-transparent
                    focus:outline-none focus:border-amber/40
+                   focus-visible:outline-2 focus-visible:outline-amber focus-visible:outline-offset-2
                    disabled:opacity-50
                    transition-colors duration-150"
       />
       <button
         type="submit"
         disabled={disabled || !text.trim()}
-        className="flex-shrink-0 w-10 h-10 rounded-xl bg-amber text-bg
+        className="flex-shrink-0 w-11 h-11 rounded-xl bg-amber text-bg
                    flex items-center justify-center
                    hover:bg-amber-hover active:scale-95
                    disabled:opacity-30 disabled:cursor-not-allowed

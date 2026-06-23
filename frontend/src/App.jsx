@@ -27,7 +27,7 @@ export default function App() {
           <div className="max-w-2xl mx-auto space-y-6">
             {messages.map((msg, i) => (
               <ChatMessage
-                key={i}
+                key={msg.id}
                 message={msg}
                 isStreaming={isStreaming}
                 isLast={i === messages.length - 1}

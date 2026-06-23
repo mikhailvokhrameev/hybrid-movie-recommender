@@ -17,12 +17,15 @@ export default function ChatMessage({ message, isStreaming, isLast }) {
   return (
     <div className="space-y-4 max-w-2xl">
       {hasMovies && (
-        <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory scrollbar-thin">
-          {message.movies.map(movie => (
-            <div key={movie.id} className="snap-start">
-              <MovieCard movie={movie} />
-            </div>
-          ))}
+        <div className="relative">
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory scrollbar-thin">
+            {message.movies.map(movie => (
+              <div key={movie.id} className="snap-start">
+                <MovieCard movie={movie} />
+              </div>
+            ))}
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-bg to-transparent" />
         </div>
       )}
 
