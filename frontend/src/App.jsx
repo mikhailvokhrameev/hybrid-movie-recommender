@@ -46,7 +46,7 @@ export default function App() {
         </main>
       )}
 
-      <footer className="sticky bottom-0 bg-bg/80 backdrop-blur-sm border-t border-surface px-4 py-3">
+      <footer className="sticky bottom-0 bg-bg/80 backdrop-blur-sm border-t border-surface px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
         <div className="max-w-2xl mx-auto">
           <ChatInput onSend={sendMessage} disabled={isStreaming} />
         </div>
