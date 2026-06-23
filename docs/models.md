@@ -94,3 +94,9 @@ creating tables.
 
 Connection configured via `DATABASE_URL` environment variable:
 `postgres://recommender:PASSWORD@db:5432/recommender`
+
+## Related
+
+- [API Reference](api.md) for HTTP endpoints and session lifecycle
+- [Core ML Pipeline](core.md) for how models are used in scoring
+- [Infrastructure](infrastructure.md) for Docker and database setup
