@@ -167,3 +167,9 @@ relevant results, the user just loses genre filtering temporarily.
 `mood_detector.py` used substring matching on Russian word stems. It missed
 context, negation, and implicit mood. Ollama already parses the full query
 and returns a mood field -- the separate module was doing the same job worse.
+
+## Related
+
+- [API Reference](api.md) for HTTP endpoints that call the core pipeline
+- [Data Models](models.md) for Movie and ChatSession schemas
+- [ML Decisions](ML.md) for evaluation methodology and parameter tuning
