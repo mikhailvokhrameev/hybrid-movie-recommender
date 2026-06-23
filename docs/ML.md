@@ -1,0 +1,213 @@
+# ML Design Decisions and Evaluation
+
+This document explains the reasoning behind each ML decision in the
+recommendation pipeline. It covers what was chosen, what was considered,
+and what the evaluation results show.
+
+## System Architecture
+
+This is a retrieval-augmented recommendation system, not standard RAG.
+The distinction matters:
+
+- **Standard RAG**: retrieve documents, stuff into LLM, LLM generates answer.
+  The LLM IS the output and decides what's relevant.
+- **This system**: retrieve candidates via ANN search, score with a
+  deterministic algorithm, ask LLM to explain results. The algorithm
+  decides what's relevant. The LLM serves two helper roles: intent
+  parsing (input) and explanation generation (output).
+
+This makes the recommendation logic explainable, testable, and tunable,
+which pure RAG is not.
+
+## Embedding Model
+
+**Choice**: `paraphrase-multilingual-mpnet-base-v2` (768 dimensions)
+
+**Why**: The catalog is Russian-language. This model handles Russian text
+well (trained on parallel multilingual corpora), produces 768-dim vectors
+(standard), and runs on both GPU and CPU. No fine-tuning needed.
+
+**Alternative considered**: Fine-tuned Russian BERT models. Rejected because
+the catalog descriptions are general-purpose text, not domain-specific jargon.
+The multilingual model captures semantic similarity well enough for movie
+descriptions.
+
+**Embedding text**: Each movie is embedded as
+`"{serial_name}. {genres joined}. {description[:500]}"`.
+This captures title, genre signal, and semantic content in one vector.
+
+## LLM (Ollama)
+
+**Choice**: `qwen2.5:7b` via standalone Ollama container
+
+**Why**: Runs locally (no API costs), supports Russian, handles JSON mode
+for structured output. The 7B size fits in 8GB VRAM and runs acceptably
+on CPU (~10-20s per generation).
+
+**Two roles**:
+1. **Intent parsing**: extracts genres, mood, themes, negations, reference
+   films from natural language queries. Uses JSON mode for structured output.
+2. **Explanation generation**: writes Russian-language explanations of why
+   each recommended movie matches the query (RAG pattern).
+
+**Genre normalization**: The LLM often returns genre names in wrong form
+(e.g., "комедия" instead of "Комедии"). An embedding-based normalizer
+maps LLM output to exact catalog genre names by cosine similarity.
+Configurable threshold via `GENRE_MATCH_THRESHOLD` env var (default 0.5).
+
+**Fallback**: When Ollama is unavailable, `parse_intent` returns empty intent.
+Semantic search via embeddings still works without parsed intent -- it just
+loses metadata filtering. This is preferable to broken keyword parsing
+that silently produces wrong results.
+
+## Candidate Generation
+
+**Choice**: pgvector HNSW index with cosine distance, top-100 candidates
+
+**Why HNSW over IVFFlat**: At 18K items, memory overhead is negligible.
+HNSW provides better recall without requiring a training step.
+
+**Negation as hard filter**: User negations ("не хочу ужасы") are applied
+as hard filters in candidate generation, not as scoring signals. A user
+saying "not horror" means zero tolerance. Making it a scoring signal
+(metadata=0.0) still allows horror movies through via high semantic similarity.
+Hard filtering eliminates the leakage entirely.
+
+## Hybrid Scoring
+
+Three signals combined via weighted sum:
+
+| Signal | Default Weight | What it measures |
+|--------|---------------|------------------|
+| Semantic | 0.4 | Cosine similarity between query and movie embeddings |
+| Metadata | 0.3 | Genre overlap between LLM-extracted intent and movie genres |
+| Session | 0.3 | Cosine similarity between session preference vector and movie |
+
+**Cosine similarity mapping**: Raw cosine similarity ranges [-1, 1].
+Mapped to [0, 1] via `(sim + 1) / 2` so negative similarity contributes 0,
+not negative weight.
+
+**Weight tuning**: Grid search across 6 weight configurations showed minimal
+impact on LLM-judged relevance (3.55-3.60 out of 5.0). Semantic similarity
+dominates regardless of weight allocation. This suggests the embedding quality
+is the bottleneck, not the scoring formula.
+
+**Configurable**: All weights are configurable via environment variables
+(`SCORE_WEIGHT_SEMANTIC`, `SCORE_WEIGHT_METADATA`, `SCORE_WEIGHT_SESSION`).
+Must sum to 1.0.
+
+## MMR Diversification
+
+**Choice**: Maximal Marginal Relevance (Carbonell & Goldstein, 1998)
+
+**Why**: Without diversification, top-5 results for "хочу триллер" might
+return 5 movies by the same director or from the same country. MMR ensures
+variety by penalizing each subsequent pick for similarity to already-selected
+results.
+
+**Formula**: `MMR = lambda * relevance - (1 - lambda) * max_similarity_to_selected`
+
+**lambda = 0.7** (relevance-biased): Higher values prioritize relevance over
+diversity. 0.7 means 70% relevance, 30% diversity penalty.
+
+**Why MMR over genre-based post-filtering**: Genre rules ("max 2 per genre")
+only handle one dimension. MMR uses embedding similarity to catch all forms
+of redundancy: same director, same sub-genre, same narrative structure.
+
+## Session-Based Preference Learning
+
+**Choice**: Exponential Moving Average (EMA) of query embeddings
+
+**Formula**: `new_vec = alpha * query_vec + (1 - alpha) * current_vec`,
+then L2-normalized.
+
+**alpha = 0.7** (configurable via `SESSION_ALPHA`): Recent queries contribute
+70% of the signal. After 5 turns, the first query's weight decays to ~0.8%.
+
+**Why EMA over simple averaging**: Simple averaging gives equal weight to all
+turns. An early exploratory query permanently dilutes the signal from a later
+specific query. EMA makes recent queries dominate.
+
+**Explicit preferences**: Alongside the implicit vector, the session tracks
+liked genres, disliked genres, themes, and reference films extracted from
+parsed intent.
+
+## Evaluation Framework
+
+### Metrics
+
+| Metric | What it measures | Implementation |
+|--------|-----------------|----------------|
+| Precision@k | Fraction of top-k results matching relevant genres | `evaluation.precision_at_k()` |
+| NDCG@k | Position-aware relevance (supports graded scores) | `evaluation.ndcg_at_k()` |
+| Diversity | 1 - mean pairwise cosine similarity among results | `evaluation.diversity()` |
+| Novelty | How non-obvious the recommendations are (genre rarity) | `evaluation.novelty()` |
+| Coverage | Fraction of catalog appearing in any recommendation | `evaluation.coverage()` |
+| LLM Relevance | Ollama rates each recommendation 1-5 for relevance | `evaluation.llm_relevance_score()` |
+| Negation Violations | Count of results matching negated genres | `evaluate_scoring._score_query()` |
+
+### LLM-as-Judge
+
+When `--llm-judge` is enabled, the same Ollama model rates each recommended
+movie's relevance to the query on a 1-5 scale. These graded scores feed into
+NDCG for position-aware quality measurement.
+
+**Known limitation (circularity)**: The same model that parses intent also
+judges relevance. This creates evaluation bias. A production system would
+use a stronger or different model for judging. For a portfolio project,
+this is documented honestly as a limitation.
+
+### Running Evaluation
+
+```bash
+# Genre-based evaluation (fast)
+docker compose exec backend python manage.py evaluate_scoring
+
+# With LLM-as-judge graded relevance (slow, ~2s per movie)
+docker compose exec backend python manage.py evaluate_scoring --llm-judge
+
+# Grid search over weight space (fast, genre-based)
+docker compose exec backend python manage.py evaluate_scoring --sweep
+
+# Grid search with LLM judge (6 configs, ~12 min on GPU)
+docker compose exec backend python manage.py evaluate_scoring --sweep --llm-judge
+
+# Custom weights
+docker compose exec backend python manage.py evaluate_scoring --weights 0.6,0.2,0.2
+```
+
+### Evaluation Results
+
+With default weights (0.4/0.3/0.3) and LLM-as-judge:
+
+| Metric | Value | Interpretation |
+|--------|-------|---------------|
+| LLM Relevance | 3.59/5 | Honest score. System returns genre-correct movies but not always the best thematic matches. |
+| NDCG@5 | 0.95 | Best-scored movies are ranked higher (strong position-aware quality). |
+| Diversity | 0.39 | Results are reasonably spread across embedding space. |
+| Novelty | 0.83 | Recommending non-obvious items, not just popular ones. |
+| Negation Violations | 0 | Hard filter works perfectly. |
+
+**Notable query-level results**:
+- "советское кино" (Soviet cinema): LLM=5.0 (perfect, era-specific queries work well)
+- "аниме для взрослых" (adult anime): LLM=1.8 (worst, age_rating not used in scoring)
+- "хочу драму, но не мелодраму": LLM=2.4 (negation works but remaining dramas lack thematic fit)
+
+**Weight sweep finding**: Minimal impact across configs (3.55-3.60). Semantic
+similarity dominates. Future improvement should focus on embedding quality
+(description augmentation, fine-tuning) rather than weight optimization.
+
+## Production Extensions (not implemented)
+
+Documented here for completeness. A production system would add:
+
+- **Time-of-day context signals**: Hypothesis that evening users prefer longer
+  films, weekend users prefer family content. Requires A/B testing to validate.
+- **True collaborative filtering**: Requires user accounts, watch history, and
+  rating data. Would use user-item matrix (ALS/BPR) blended with content-based scores.
+- **Model evaluation pipeline**: Automated NDCG/MAP/MRR measurement with CI
+  integration, regression detection on model changes.
+- **A/B testing framework**: For comparing scoring weight configurations with
+  real user engagement metrics (click-through, watch completion).
+- **Cross-model evaluation**: Using a stronger LLM (14B+) or different model
+  family for judging relevance, eliminating the circularity limitation.

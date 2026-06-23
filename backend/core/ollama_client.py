@@ -210,20 +210,25 @@ async def aparse_intent(query: str) -> dict:
         return _fallback_intent(query)
 
 
-async def agenerate_explanation(query: str, movies: list[dict]) -> str:
-    """Async variant of generate_explanation for use in async Django views."""
+async def astream_explanation(query: str, movies: list[dict]):
+    """Async streaming variant of generate_explanation. Yields tokens as they arrive."""
     try:
         async with httpx.AsyncClient() as client:
-            response = await client.post(
+            async with client.stream(
+                "POST",
                 f"{settings.OLLAMA_BASE_URL}/api/chat",
-                json=_explanation_payload(query, movies),
+                json=_explanation_payload(query, movies, stream=True),
                 timeout=120.0,
-            )
-            response.raise_for_status()
-            return response.json()["message"]["content"]
-    except (httpx.HTTPError, KeyError) as e:
-        logger.warning(f"Async explanation generation failed: {e}")
-        return ""
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line:
+                        data = json.loads(line)
+                        content = data.get("message", {}).get("content", "")
+                        if content:
+                            yield content
+    except (httpx.HTTPError, json.JSONDecodeError) as e:
+        logger.warning(f"Async explanation streaming failed: {e}")
 
 
 async def ais_available() -> bool:

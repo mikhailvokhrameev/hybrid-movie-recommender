@@ -1,9 +1,24 @@
+import asyncio
+import json
+import logging
 from datetime import datetime
 
+from asgiref.sync import sync_to_async
+from django.db import transaction
+from django.http import StreamingHttpResponse
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
-from .models import Movie
+from core.candidate_generation import generate_candidates
+from core.embedding_service import encode_query
+from core.ollama_client import aparse_intent, astream_explanation
+from core.scoring import hybrid_score, mmr_diversify
+from core.session_manager import track_explicit_preferences, update_preference_vector
+from .models import ChatSession, Movie
+
+logger = logging.getLogger(__name__)
+
+TOP_N = 5
 
 
 class HealthView(APIView):
@@ -12,4 +27,128 @@ class HealthView(APIView):
             "status": "healthy",
             "timestamp": datetime.now().isoformat(),
             "catalog_size": Movie.objects.count(),
+        })
+
+
+def _serialize_movie(movie: dict) -> dict:
+    return {
+        "id": movie["id"],
+        "serial_name": movie["serial_name"],
+        "genres": movie["genres"],
+        "content_type": movie["content_type"],
+        "country": movie["country"],
+        "actors": movie["actors"],
+        "director": movie["director"],
+        "age_rating": movie["age_rating"],
+        "release_date": movie["release_date"],
+        "description": movie["description"],
+        "url": movie["url"],
+        "score": round(movie["total"], 4),
+    }
+
+
+async def _get_or_create_session(session_id: str | None) -> ChatSession:
+    if session_id:
+        try:
+            session = await ChatSession.objects.aget(session_id=session_id)
+            if not session.is_expired():
+                return session
+        except ChatSession.DoesNotExist:
+            pass
+    return await ChatSession.objects.acreate()
+
+
+@sync_to_async(thread_sensitive=False)
+def _save_session(session: ChatSession, query: str, intent: dict,
+                  query_embedding: list[float], movies: list[dict]):
+    with transaction.atomic():
+        fresh = ChatSession.objects.select_for_update().get(pk=session.pk)
+        fresh.preference_vector = update_preference_vector(
+            list(fresh.preference_vector) if fresh.preference_vector else None,
+            query_embedding,
+        )
+        fresh.preferences = track_explicit_preferences(fresh.preferences, intent)
+        fresh.history = list(fresh.history) + [{
+            "role": "user",
+            "content": query,
+            "movies": [m["serial_name"] for m in movies],
+        }]
+        fresh.turn_count += 1
+        fresh.save()
+
+
+@sync_to_async(thread_sensitive=False)
+def _generate_and_score(query_embedding, intent, session_vector):
+    candidates = generate_candidates(query_embedding, intent)
+    scored = []
+    for c in candidates:
+        scores = hybrid_score(c, query_embedding, intent, session_vector)
+        c.update(scores)
+        scored.append(c)
+    return mmr_diversify(scored, top_n=TOP_N)
+
+
+class ChatView(APIView):
+    async def post(self, request):
+        message = request.data.get("message", "").strip()
+        if not message:
+            return Response({"error": "message is required"}, status=400)
+        if len(message) > 2000:
+            return Response({"error": "message too long (max 2000 chars)"}, status=400)
+
+        session_id = request.data.get("session_id")
+        session = await _get_or_create_session(session_id)
+
+        intent, query_embedding = await asyncio.gather(
+            aparse_intent(message),
+            sync_to_async(encode_query)(message),
+        )
+
+        session_vector = list(session.preference_vector) if session.preference_vector else None
+        top_movies = await _generate_and_score(query_embedding, intent, session_vector)
+        serialized = [_serialize_movie(m) for m in top_movies]
+
+        await _save_session(session, message, intent, query_embedding, top_movies)
+
+        movies_for_llm = [
+            {"serial_name": m["serial_name"], "genres": m["genres"], "description": m["description"]}
+            for m in top_movies
+        ]
+
+        async def event_stream():
+            yield _sse_event("movies", {
+                "session_id": str(session.session_id),
+                "movies": serialized,
+                "intent": intent,
+            })
+            has_tokens = False
+            async for token in astream_explanation(message, movies_for_llm):
+                has_tokens = True
+                yield _sse_event("token", {"text": token})
+            if not has_tokens:
+                yield _sse_event("error", {"message": "explanation generation failed"})
+            yield _sse_event("done", {})
+
+        return StreamingHttpResponse(
+            event_stream(),
+            content_type="text/event-stream",
+            headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+        )
+
+
+def _sse_event(event: str, data: dict) -> str:
+    return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
+
+
+class SessionHistoryView(APIView):
+    async def get(self, request, session_id):
+        try:
+            session = await ChatSession.objects.aget(session_id=session_id)
+        except ChatSession.DoesNotExist:
+            return Response({"error": "session not found"}, status=404)
+        return Response({
+            "session_id": str(session.session_id),
+            "history": session.history,
+            "turn_count": session.turn_count,
+            "preferences": session.preferences,
         })
