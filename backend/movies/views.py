@@ -5,7 +5,8 @@ from datetime import datetime
 
 from asgiref.sync import sync_to_async
 from django.db import transaction
-from django.http import StreamingHttpResponse
+from django.http import JsonResponse, StreamingHttpResponse
+from django.views import View
 from rest_framework.response import Response
 from rest_framework.views import APIView
 
@@ -88,15 +89,20 @@ def _generate_and_score(query_embedding, intent, session_vector):
     return mmr_diversify(scored, top_n=TOP_N)
 
 
-class ChatView(APIView):
+class ChatView(View):
     async def post(self, request):
-        message = request.data.get("message", "").strip()
-        if not message:
-            return Response({"error": "message is required"}, status=400)
-        if len(message) > 2000:
-            return Response({"error": "message too long (max 2000 chars)"}, status=400)
+        try:
+            body = json.loads(request.body)
+        except (json.JSONDecodeError, ValueError):
+            return JsonResponse({"error": "invalid JSON"}, status=400)
 
-        session_id = request.data.get("session_id")
+        message = body.get("message", "").strip()
+        if not message:
+            return JsonResponse({"error": "message is required"}, status=400)
+        if len(message) > 2000:
+            return JsonResponse({"error": "message too long (max 2000 chars)"}, status=400)
+
+        session_id = body.get("session_id")
         session = await _get_or_create_session(session_id)
 
         intent, query_embedding = await asyncio.gather(
@@ -140,13 +146,13 @@ def _sse_event(event: str, data: dict) -> str:
     return f"event: {event}\ndata: {json.dumps(data, ensure_ascii=False)}\n\n"
 
 
-class SessionHistoryView(APIView):
+class SessionHistoryView(View):
     async def get(self, request, session_id):
         try:
             session = await ChatSession.objects.aget(session_id=session_id)
         except ChatSession.DoesNotExist:
-            return Response({"error": "session not found"}, status=404)
-        return Response({
+            return JsonResponse({"error": "session not found"}, status=404)
+        return JsonResponse({
             "session_id": str(session.session_id),
             "history": session.history,
             "turn_count": session.turn_count,
