@@ -40,11 +40,11 @@ def _serialize_movie(movie: dict) -> dict:
         "country": movie["country"],
         "actors": movie["actors"],
         "director": movie["director"],
-        "age_rating": movie["age_rating"],
+        "age_rating": float(movie["age_rating"]) if movie["age_rating"] is not None else None,
         "release_date": movie["release_date"],
         "description": movie["description"],
         "url": movie["url"],
-        "score": round(movie["total"], 4),
+        "score": round(float(movie["total"]), 4),
     }
 
 
@@ -65,7 +65,7 @@ def _save_session(session: ChatSession, query: str, intent: dict,
     with transaction.atomic():
         fresh = ChatSession.objects.select_for_update().get(pk=session.pk)
         fresh.preference_vector = update_preference_vector(
-            list(fresh.preference_vector) if fresh.preference_vector else None,
+            [float(x) for x in fresh.preference_vector] if fresh.preference_vector is not None else None,
             query_embedding,
         )
         fresh.preferences = track_explicit_preferences(fresh.preferences, intent)
@@ -102,19 +102,23 @@ class ChatView(View):
         if len(message) > 2000:
             return JsonResponse({"error": "message too long (max 2000 chars)"}, status=400)
 
-        session_id = body.get("session_id")
-        session = await _get_or_create_session(session_id)
+        try:
+            session_id = body.get("session_id")
+            session = await _get_or_create_session(session_id)
 
-        intent, query_embedding = await asyncio.gather(
-            aparse_intent(message),
-            sync_to_async(encode_query)(message),
-        )
+            intent, query_embedding = await asyncio.gather(
+                aparse_intent(message),
+                sync_to_async(encode_query)(message),
+            )
 
-        session_vector = list(session.preference_vector) if session.preference_vector else None
-        top_movies = await _generate_and_score(query_embedding, intent, session_vector)
-        serialized = [_serialize_movie(m) for m in top_movies]
+            session_vector = [float(x) for x in session.preference_vector] if session.preference_vector is not None else None
+            top_movies = await _generate_and_score(query_embedding, intent, session_vector)
+            serialized = [_serialize_movie(m) for m in top_movies]
 
-        await _save_session(session, message, intent, query_embedding, top_movies)
+            await _save_session(session, message, intent, query_embedding, top_movies)
+        except Exception:
+            logger.exception("ChatView error")
+            return JsonResponse({"error": "internal error"}, status=500)
 
         movies_for_llm = [
             {"serial_name": m["serial_name"], "genres": m["genres"], "description": m["description"]}
