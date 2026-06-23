@@ -1,0 +1,63 @@
+import MovieCard from './MovieCard'
+
+export default function ChatMessage({ message, isStreaming, isLast }) {
+  if (message.role === 'user') {
+    return (
+      <div className="flex justify-end">
+        <div className="max-w-md px-4 py-2.5 rounded-2xl rounded-br-sm bg-surface text-ink text-sm leading-relaxed">
+          {message.content}
+        </div>
+      </div>
+    )
+  }
+
+  const hasMovies = message.movies?.length > 0
+  const showCaret = isStreaming && isLast && !message.error
+
+  return (
+    <div className="space-y-4 max-w-2xl">
+      {hasMovies && (
+        <div className="relative">
+          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory scrollbar-thin">
+            {message.movies.map(movie => (
+              <div key={movie.id} className="snap-start">
+                <MovieCard movie={movie} />
+              </div>
+            ))}
+          </div>
+          <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-bg to-transparent" />
+        </div>
+      )}
+
+      {message.explanation && (
+        <div className="text-sm leading-relaxed text-ink/90 whitespace-pre-wrap">
+          {message.explanation}
+          {showCaret && (
+            <span
+              className="inline-block w-0.5 h-4 bg-amber ml-0.5 align-text-bottom"
+              style={{ animation: 'pulse-caret 1s ease-in-out infinite' }}
+            />
+          )}
+        </div>
+      )}
+
+      {!message.explanation && showCaret && !hasMovies && (
+        <div className="flex gap-2">
+          {[0, 1, 2].map(i => (
+            <div
+              key={i}
+              className="h-40 w-56 rounded-lg bg-surface animate-pulse"
+              style={{ animationDelay: `${i * 150}ms` }}
+            />
+          ))}
+        </div>
+      )}
+
+      {message.error && (
+        <p className="text-sm text-error">
+          {message.error}
+        </p>
+      )}
+    </div>
+  )
+}
