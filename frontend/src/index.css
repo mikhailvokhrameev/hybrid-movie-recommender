@@ -1,5 +1,5 @@
-@import "tailwindcss";
 @import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&display=swap');
+@import "tailwindcss";
 
 @theme {
   --color-bg: oklch(0.08 0 0);

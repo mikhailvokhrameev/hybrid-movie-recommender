@@ -29,8 +29,10 @@ env/
 .DS_Store
 Thumbs.db
 
-# Claude Code
-CLAUDE.md
+# Documentation (keep only README.md and docs/)
+*.md
+!README.md
+!docs/*.md
 
 # Node
 node_modules/
@@ -59,3 +61,6 @@ coverage.xml
 
 # Vite
 frontend/dist/
+
+# Data files
+catalog_okko.parquet
