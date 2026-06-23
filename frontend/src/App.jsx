@@ -1,12 +1,15 @@
 import { useRef, useEffect } from 'react'
 import { useChat } from './hooks/useChat'
+import { useTheme } from './hooks/useTheme'
 import Header from './components/Header'
+import ThemeToggle from './components/ThemeToggle'
 import ChatMessage from './components/ChatMessage'
 import ChatInput from './components/ChatInput'
 import WelcomeScreen from './components/WelcomeScreen'
 
 export default function App() {
   const { messages, isStreaming, sendMessage, reset } = useChat()
+  const { theme, toggle: toggleTheme } = useTheme()
   const scrollRef = useRef(null)
   const isEmpty = messages.length === 0
 
@@ -18,7 +21,10 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-svh">
-      <Header onHomeClick={reset} showHome={!isEmpty} />
+      <Header
+        onHomeClick={reset}
+        themeSlot={<ThemeToggle theme={theme} onToggle={toggleTheme} />}
+      />
 
       {isEmpty ? (
         <WelcomeScreen onSuggestionClick={sendMessage} />
