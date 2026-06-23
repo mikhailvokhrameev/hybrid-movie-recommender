@@ -70,6 +70,18 @@ services:
         uvicorn recommender.asgi:application --host 0.0.0.0 --port 8000
       "
 
+<<<<<<< HEAD
+=======
+  frontend:
+    build: ./frontend
+    ports:
+      - "3000:3000"
+    environment:
+      VITE_API_URL: http://backend:8000
+    depends_on:
+      - backend
+
+>>>>>>> 1d685467110256380551b32c2012568ba0b03943
 volumes:
   pgdata:
   ollama_data:
