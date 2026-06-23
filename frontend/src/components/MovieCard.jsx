@@ -17,12 +17,12 @@ export default function MovieCard({ movie }) {
         </svg>
       </div>
 
-      <div className="p-3 space-y-2">
+      <div className="p-3 flex flex-col h-36">
         <h3 className="font-display text-base leading-snug text-ink line-clamp-2 group-hover:text-amber transition-colors duration-200">
           {movie.serial_name}
         </h3>
 
-        <div className="flex items-center gap-2 text-xs text-muted">
+        <div className="flex items-center gap-2 text-xs text-muted mt-1.5">
           {year && <span>{year}</span>}
           {movie.director && (
             <>
@@ -32,7 +32,7 @@ export default function MovieCard({ movie }) {
           )}
         </div>
 
-        <div className="flex flex-wrap gap-1">
+        <div className="flex flex-wrap gap-1 mt-2">
           {movie.genres?.slice(0, 3).map(genre => (
             <span
               key={genre}
@@ -44,12 +44,10 @@ export default function MovieCard({ movie }) {
           ))}
         </div>
 
-        <div className="flex items-center justify-between pt-1">
-          <div className="flex items-center gap-1">
-            <span className="text-[0.65rem] font-medium text-amber tracking-wide">
-              {(movie.score * 100).toFixed(0)}% match
-            </span>
-          </div>
+        <div className="flex items-center justify-between mt-auto pt-1">
+          <span className="text-[0.65rem] font-medium text-amber tracking-wide">
+            {(movie.score * 100).toFixed(0)}% match
+          </span>
           {movie.content_type && (
             <span className="text-[0.65rem] text-muted">{movie.content_type}</span>
           )}
