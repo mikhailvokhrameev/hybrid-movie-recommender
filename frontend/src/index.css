@@ -1,0 +1,54 @@
+@import "tailwindcss";
+@import url('https://fonts.googleapis.com/css2?family=DM+Serif+Display&family=Inter:wght@400;500;600&display=swap');
+
+@theme {
+  --color-bg: oklch(0.08 0 0);
+  --color-surface: oklch(0.15 0 0);
+  --color-elevated: oklch(0.20 0 0);
+  --color-amber: oklch(0.75 0.16 55);
+  --color-amber-hover: oklch(0.80 0.18 55);
+  --color-amber-muted: oklch(0.75 0.16 55 / 0.15);
+  --color-ink: oklch(0.95 0 0);
+  --color-muted: oklch(0.65 0 0);
+  --color-error: oklch(0.65 0.2 25);
+
+  --font-display: 'DM Serif Display', Georgia, serif;
+  --font-body: 'Inter', system-ui, sans-serif;
+}
+
+body {
+  margin: 0;
+  background-color: var(--color-bg);
+  color: var(--color-ink);
+  font-family: var(--font-body);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+#root {
+  min-height: 100svh;
+  display: flex;
+  flex-direction: column;
+}
+
+* {
+  scrollbar-width: thin;
+  scrollbar-color: var(--color-surface) transparent;
+}
+
+@keyframes pulse-caret {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.3; }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
