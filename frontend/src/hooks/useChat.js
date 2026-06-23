@@ -82,7 +82,14 @@ export function useChat() {
     }
   }, [isStreaming, sessionId])
 
-  return { messages, isStreaming, sendMessage, sessionId }
+  const reset = useCallback(() => {
+    if (abortRef.current) abortRef.current.abort()
+    setMessages([])
+    setSessionId(null)
+    setIsStreaming(false)
+  }, [])
+
+  return { messages, isStreaming, sendMessage, sessionId, reset }
 }
 
 function handleSSEEvent(event, data, setMessages, setSessionId) {

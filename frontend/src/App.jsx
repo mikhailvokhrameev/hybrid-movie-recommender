@@ -1,11 +1,12 @@
 import { useRef, useEffect } from 'react'
 import { useChat } from './hooks/useChat'
+import Header from './components/Header'
 import ChatMessage from './components/ChatMessage'
 import ChatInput from './components/ChatInput'
 import WelcomeScreen from './components/WelcomeScreen'
 
 export default function App() {
-  const { messages, isStreaming, sendMessage } = useChat()
+  const { messages, isStreaming, sendMessage, reset } = useChat()
   const scrollRef = useRef(null)
   const isEmpty = messages.length === 0
 
@@ -17,6 +18,8 @@ export default function App() {
 
   return (
     <div className="flex flex-col h-svh">
+      <Header onHomeClick={reset} showHome={!isEmpty} />
+
       {isEmpty ? (
         <WelcomeScreen onSuggestionClick={sendMessage} />
       ) : (
