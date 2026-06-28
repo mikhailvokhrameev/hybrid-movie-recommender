@@ -109,6 +109,9 @@ function handleSSEEvent(event, data, setMessages, setSessionId) {
         return updated
       })
       break
+    case 'session':
+      setSessionId(data.session_id)
+      break
     case 'token':
       setMessages(prev => {
         const updated = [...prev]
