@@ -34,6 +34,31 @@ CATALOG_GENRES = [
     "Триллеры", "Ужасы", "Фантастика", "Фильмы для детей", "Фитнес", "Фэнтези",
 ]
 
+CLASSIFY_PROMPT = """You are a message classifier for a movie recommendation chatbot.
+Classify the user's message into exactly one category. Return a JSON object.
+
+Categories:
+- "new_search": user wants movie recommendations (e.g. "хочу комедию", "покажи триллеры", "что посмотреть")
+- "follow_up": user asks about previously recommended movies (e.g. "расскажи про первый", "кто снял этот фильм?", "о чём он?")
+- "refinement": user wants to adjust the last recommendations (e.g. "а повеселее?", "без сериалов", "только российские", "что-нибудь поновее")
+- "general_chat": greetings, thanks, questions about the bot (e.g. "привет", "спасибо", "как ты работаешь?")
+
+Return: {{"category": "<one of: new_search, follow_up, refinement, general_chat>"}}
+
+User message: "{message}"
+"""
+
+CONVERSATIONAL_PROMPT = """You are a Russian-speaking movie recommendation assistant. You ONLY discuss movies, series, directors, actors, genres, and cinema.
+{context}
+
+Rules:
+- Always respond in Russian
+- If the user asks about anything unrelated to movies or cinema, politely redirect: say you are a movie assistant and suggest discussing films instead
+- Be concise, friendly, and knowledgeable about cinema
+
+User: "{message}"
+"""
+
 INTENT_PROMPT = """You are a movie intent parser. Given a user query, return a JSON object.
 
 ALLOWED GENRES (use ONLY these exact strings, copy-paste):
@@ -208,6 +233,59 @@ async def aparse_intent(query: str) -> dict:
     except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
         logger.warning(f"Async intent parsing failed, using fallback: {e}")
         return _fallback_intent(query)
+
+
+async def aclassify_message(message: str) -> str:
+    """Classify a user message into one of: new_search, follow_up, refinement, general_chat."""
+    valid = {"new_search", "follow_up", "refinement", "general_chat"}
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                f"{settings.OLLAMA_BASE_URL}/api/chat",
+                json={
+                    "model": settings.OLLAMA_MODEL,
+                    "messages": [{"role": "user", "content": CLASSIFY_PROMPT.format(message=message)}],
+                    "format": "json",
+                    "stream": False,
+                },
+                timeout=30.0,
+            )
+            response.raise_for_status()
+            parsed = json.loads(response.json()["message"]["content"])
+            category = parsed.get("category", "new_search")
+            return category if category in valid else "new_search"
+    except (httpx.HTTPError, json.JSONDecodeError, KeyError) as e:
+        logger.warning(f"Message classification failed, defaulting to new_search: {e}")
+        return "new_search"
+
+
+async def astream_conversational(message: str, context: str = ""):
+    """Stream a conversational response (no movie search). Yields tokens."""
+    prompt = CONVERSATIONAL_PROMPT.format(
+        message=message,
+        context=context if context else "You are chatting casually. No movie context available.",
+    )
+    try:
+        async with httpx.AsyncClient() as client:
+            async with client.stream(
+                "POST",
+                f"{settings.OLLAMA_BASE_URL}/api/chat",
+                json={
+                    "model": settings.OLLAMA_MODEL,
+                    "messages": [{"role": "user", "content": prompt}],
+                    "stream": True,
+                },
+                timeout=120.0,
+            ) as response:
+                response.raise_for_status()
+                async for line in response.aiter_lines():
+                    if line:
+                        data = json.loads(line)
+                        content = data.get("message", {}).get("content", "")
+                        if content:
+                            yield content
+    except (httpx.HTTPError, json.JSONDecodeError) as e:
+        logger.warning(f"Conversational streaming failed: {e}")
 
 
 async def astream_explanation(query: str, movies: list[dict]):

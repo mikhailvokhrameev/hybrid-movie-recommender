@@ -4,7 +4,7 @@ export default function ChatMessage({ message, isStreaming, isLast }) {
   if (message.role === 'user') {
     return (
       <div className="flex justify-end">
-        <div className="max-w-md px-4 py-2.5 rounded-2xl rounded-br-sm bg-surface text-ink text-sm leading-relaxed">
+        <div className="max-w-[85%] sm:max-w-md px-4 py-2.5 rounded-2xl rounded-br-sm bg-surface text-ink text-sm leading-relaxed">
           {message.content}
         </div>
       </div>
@@ -17,13 +17,14 @@ export default function ChatMessage({ message, isStreaming, isLast }) {
   return (
     <div className="space-y-4 max-w-2xl">
       {hasMovies && (
-        <div className="relative">
-          <div className="flex gap-3 overflow-x-auto pb-2 -mx-4 px-4 snap-x snap-mandatory scrollbar-thin">
+        <div className="relative -mx-4">
+          <div className="flex gap-3 overflow-x-auto py-1 px-4 snap-x snap-mandatory scrollbar-thin">
             {message.movies.map(movie => (
               <div key={movie.id} className="snap-start">
                 <MovieCard movie={movie} />
               </div>
             ))}
+            <div className="flex-shrink-0 w-1" aria-hidden="true" />
           </div>
           <div className="pointer-events-none absolute inset-y-0 right-0 w-12 bg-gradient-to-l from-bg to-transparent" />
         </div>

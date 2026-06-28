@@ -233,6 +233,7 @@ The API runs on Django ASGI via uvicorn. Key threading decisions:
 
 ## Related
 
+- [Frontend](frontend.md) for the React chat UI that consumes these endpoints
 - [Core ML Pipeline](core.md) for scoring weights, MMR, and embedding details
 - [Data Models](models.md) for Movie and ChatSession schemas
 - [Infrastructure](infrastructure.md) for Docker services and deployment

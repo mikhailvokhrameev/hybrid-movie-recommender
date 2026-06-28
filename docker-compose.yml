@@ -71,13 +71,19 @@ services:
       "
 
   frontend:
-    build: ./frontend
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
     ports:
       - "3000:3000"
     environment:
-      VITE_API_URL: http://backend:8000
+      - VITE_API_URL=/api
+    volumes:
+      - ./frontend:/app
+      - /app/node_modules
     depends_on:
       - backend
+    restart: unless-stopped
 
 volumes:
   pgdata:
