@@ -45,8 +45,10 @@ services:
       OLLAMA_MODEL: ${OLLAMA_MODEL:-qwen2.5:7b}
       EMBEDDING_MODEL: ${EMBEDDING_MODEL:-sentence-transformers/paraphrase-multilingual-mpnet-base-v2}
       DJANGO_SETTINGS_MODULE: recommender.settings
-      SECRET_KEY: ${SECRET_KEY:-change-in-production}
+      SECRET_KEY: ${SECRET_KEY:-dev-only-insecure-key-do-not-use-in-prod}
       DEBUG: ${DEBUG:-0}
+      ALLOWED_HOSTS: localhost,127.0.0.1,backend
+      CORS_ALLOWED_ORIGINS: http://localhost:3000,http://127.0.0.1:3000
       SCORE_WEIGHT_SEMANTIC: ${SCORE_WEIGHT_SEMANTIC:-0.4}
       SCORE_WEIGHT_METADATA: ${SCORE_WEIGHT_METADATA:-0.3}
       SCORE_WEIGHT_SESSION: ${SCORE_WEIGHT_SESSION:-0.3}
