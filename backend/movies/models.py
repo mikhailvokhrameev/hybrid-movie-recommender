@@ -1,8 +1,13 @@
+import secrets
 import uuid
 
 from django.db import models
 from django.utils import timezone
 from pgvector.django import VectorField, HnswIndex
+
+
+def generate_token():
+    return secrets.token_urlsafe(32)
 
 
 class Movie(models.Model):
@@ -36,6 +41,7 @@ class Movie(models.Model):
 
 class ChatSession(models.Model):
     session_id = models.UUIDField(default=uuid.uuid4, unique=True, db_index=True)
+    session_token = models.CharField(max_length=64, default=generate_token, db_index=True)
     preference_vector = VectorField(dimensions=768, null=True, blank=True)
     preferences = models.JSONField(default=dict)
     history = models.JSONField(default=list)

@@ -1,6 +1,7 @@
 import asyncio
 import json
 import logging
+import secrets
 from datetime import datetime
 
 from asgiref.sync import sync_to_async
@@ -159,6 +160,7 @@ class ChatView(View):
         async def event_stream():
             yield _sse_event("movies", {
                 "session_id": str(session.session_id),
+                "session_token": session.session_token,
                 "movies": serialized,
                 "intent": intent,
             })
@@ -184,7 +186,7 @@ class ChatView(View):
         await _append_history(session, "user", message)
 
         async def event_stream():
-            yield _sse_event("session", {"session_id": str(session.session_id)})
+            yield _sse_event("session", {"session_id": str(session.session_id), "session_token": session.session_token})
             async for token in astream_conversational(message, context):
                 yield _sse_event("token", {"text": token})
             yield _sse_event("done", {})
@@ -217,6 +219,7 @@ class ChatView(View):
         async def event_stream():
             yield _sse_event("movies", {
                 "session_id": str(session.session_id),
+                "session_token": session.session_token,
                 "movies": serialized,
                 "intent": intent,
             })
@@ -241,10 +244,15 @@ def _sse_event(event: str, data: dict) -> str:
 
 class SessionHistoryView(View):
     async def get(self, request, session_id):
+        token = request.headers.get("X-Session-Token", "")
+        if not token:
+            return JsonResponse({"error": "session token required"}, status=401)
         try:
             session = await ChatSession.objects.aget(session_id=session_id)
         except ChatSession.DoesNotExist:
             return JsonResponse({"error": "session not found"}, status=404)
+        if not secrets.compare_digest(token, session.session_token):
+            return JsonResponse({"error": "invalid session token"}, status=403)
         return JsonResponse({
             "session_id": str(session.session_id),
             "history": session.history,
