@@ -104,12 +104,19 @@ curl -N -X POST http://localhost:8000/api/chat/ \
 ### `GET /api/sessions/<uuid:session_id>/`
 
 Retrieve the conversation history and learned preferences for an existing session.
+Requires the `X-Session-Token` header for authentication.
 
 **Path parameters**:
 
 | Parameter | Type | Description |
 |-----------|------|-------------|
 | `session_id` | UUID | The session UUID returned by the chat endpoint |
+
+**Required headers**:
+
+| Header | Description |
+|--------|-------------|
+| `X-Session-Token` | The `session_token` value returned in the SSE `movies` or `session` event |
 
 **Response** (JSON, 200):
 
@@ -137,6 +144,8 @@ Retrieve the conversation history and learned preferences for an existing sessio
 
 | Status | Body | Cause |
 |--------|------|-------|
+| 401 | `{"error": "session token required"}` | Missing `X-Session-Token` header |
+| 403 | `{"error": "invalid session token"}` | Token does not match the session |
 | 404 | `{"error": "session not found"}` | UUID does not match any session |
 
 ---

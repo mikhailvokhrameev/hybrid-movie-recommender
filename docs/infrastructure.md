@@ -15,8 +15,8 @@ The system runs as 4 Docker services via `docker compose up`:
 │  Vite dev  │  uvicorn   │  auto-pulls   │  pgvector ext  │
 │  server    │  ASGI      │  model on     │  HNSW index    │
 │            │            │  first start  │                │
-│  NOT YET   │  sentence- │               │  catalog +     │
-│  BUILT     │  transformers│              │  sessions      │
+│  proxies   │  sentence- │               │  catalog +     │
+│  /api/*    │  transformers│              │  sessions      │
 └────────────┴─────┬──────┴───────┬───────┴────────────────┘
                    │              │
                    │  httpx calls │

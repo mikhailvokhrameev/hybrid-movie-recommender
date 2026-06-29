@@ -51,6 +51,7 @@ preference profile for session-based recommendation learning.
 |-------|------|-------------|-------------|
 | `id` | BigAutoField | PK | Auto-generated primary key |
 | `session_id` | UUIDField | unique, indexed | Frontend-generated session identifier |
+| `session_token` | CharField(64) | indexed | Cryptographic token for session auth (`secrets.token_urlsafe(32)`) |
 | `preference_vector` | VectorField(768) | nullable | EMA-updated preference embedding |
 | `preferences` | JSONField | default={} | Explicit preferences (liked/disliked genres, themes) |
 | `history` | JSONField | default=[] | Conversation message history |
